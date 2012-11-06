@@ -1226,6 +1226,7 @@ void ruby_init_stack(volatile VALUE*);
     VALUE variable_in_this_stack_frame; \
     ruby_init_stack(&variable_in_this_stack_frame);
 void ruby_init(void);
+void ruby_init_prelude(void);
 void *ruby_options(int, char**);
 int ruby_run_node(void *);
 int ruby_exec_node(void *);
