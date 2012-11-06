@@ -44,6 +44,12 @@ module Gem::InstallUpdateOptions
       options[:bin_dir] = File.expand_path(value)
     end
 
+    add_option(:"Install/Update", '--build-root DIR',
+      'Temporary installation root. Useful for building',
+      'packages. Do not use this when installing remote gems.') do |value, options|
+      options[:build_root] = File.expand_path(value)
+    end
+
     add_option(:"Install/Update", '-d', '--[no-]rdoc',
                'Generate RDoc documentation for the gem on',
                'install') do |value, options|

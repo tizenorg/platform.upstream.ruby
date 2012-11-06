@@ -69,6 +69,7 @@ class Gem::DependencyInstaller
     @installed_gems = []
 
     @install_dir = options[:install_dir] || Gem.dir
+    @build_root = options[:build_root]
     @cache_dir = options[:cache_dir] || @install_dir
 
     # Set with any errors that SpecFetcher finds while search through
@@ -290,6 +291,7 @@ class Gem::DependencyInstaller
                                 :format_executable   => @format_executable,
                                 :ignore_dependencies => @ignore_dependencies,
                                 :install_dir         => @install_dir,
+                                :build_root          => @build_root,
                                 :security_policy     => @security_policy,
                                 :user_install        => @user_install,
                                 :wrappers            => @wrappers
