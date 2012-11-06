@@ -215,9 +215,7 @@ def get_shlib_path_head
 
   else
     [
-      '/opt', '/pkg', '/share',
-      '/usr/local/opt', '/usr/local/pkg', '/usr/local/share', '/usr/local',
-      '/usr/opt', '/usr/pkg', '/usr/share', '/usr/contrib', '/usr'
+      '/usr'
     ].each{|dir|
       next unless File.directory?(dir)
 
