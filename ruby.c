@@ -1091,7 +1091,7 @@ proc_options(long argc, char **argv, struct cmdline_options *opt, int envopt)
     return argc0 - argc;
 }
 
-static void
+void
 ruby_init_prelude(void)
 {
     Init_prelude();
