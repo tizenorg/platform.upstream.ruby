@@ -16,19 +16,10 @@ Release:        0
 %ifarch %ix86 x86_64 ppc ppc64
 %define use_valgrind 1
 %endif
-License:        BSD-2-Clause or Ruby
+%define run_tests 0
 #
-Summary:        An Interpreted Object-Oriented Scripting Language
 #
-Url:            http://www.ruby-lang.org/
-Group:          Development/Languages/Ruby
-Source:         ftp://ftp.ruby-lang.org/pub/ruby/1.9/ruby-%{pkg_version}-%{patch_level}.tar.bz2
-Source6:        ruby19.macros
-Source7:        gem_install_wrapper.sh
-Patch0:         rubygems-1.5.0_buildroot.patch
-Patch1:         ruby-1.9.2p290_tcl_no_stupid_rpaths.patch
-Patch2:         ruby19-export_init_prelude.patch
-BuildRequires:  ca-certificates
+BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  gdbm-devel
 BuildRequires:  libffi-devel
 BuildRequires:  libyaml-devel
@@ -37,14 +28,23 @@ BuildRequires:  openssl-devel
 BuildRequires:  pkg-config
 BuildRequires:  readline-devel
 BuildRequires:  zlib-devel
+BuildRequires:  ca-certificates
 #BuildRequires:  ca-certificates-cacert
 #
 Provides:       rubygem-rake = 0.9.2.2
 Provides:       ruby(abi) = %{rb_ver}
-%define run_tests 0
 #
+Url:            http://www.ruby-lang.org/
+Source:         ftp://ftp.ruby-lang.org/pub/ruby/1.9/ruby-%{pkg_version}-%{patch_level}.tar.bz2
+Source6:        ruby19.macros
+Source7:        gem_install_wrapper.sh
+Patch:          rubygems-1.5.0_buildroot.patch
+Patch1:         ruby-1.9.2p290_tcl_no_stupid_rpaths.patch
+Patch2:         ruby19-export_init_prelude.patch
 #
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
+Summary:        An Interpreted Object-Oriented Scripting Language
+License:        BSD-2-Clause or Ruby
+Group:          Development/Languages/Ruby
 
 %description
 Ruby is an interpreted scripting language for quick and easy
@@ -75,16 +75,18 @@ simple, straight-forward, and extensible.
 - Highly Portable (works on many UNIX machines; DOS, Windows, Mac,
 BeOS, and more)
 
+
 %package devel
 Summary:        Development files to link against Ruby
 Group:          Development/Languages/Ruby
 Requires:       %{name} = %{version}
-Requires:       ruby-common
 Provides:       rubygems19 = 1.3.7
 Provides:       rubygems19_with_buildroot_patch
+Requires:       ruby-common
 
 %description devel
 Development files to link against Ruby.
+
 
 %package doc-ri
 Summary:        Ruby Interactive Documentation
@@ -115,9 +117,9 @@ BuildArch:      noarch
 Example scripts for ruby
 
 %package test-suite
+Requires:       %{name} = %{version}
 Summary:        An Interpreted Object-Oriented Scripting Language
 Group:          Development/Languages/Ruby
-Requires:       %{name} = %{version}
 %if 0%{?suse_version} >= 1120
 BuildArch:      noarch
 %endif
@@ -152,7 +154,7 @@ BeOS, and more)
 
 %prep
 %setup -q -n ruby-%{pkg_version}-%{patch_level}
-%patch0
+%patch
 %patch1
 %patch2 -p1
 %if 0%{?needs_optimization_zero}
@@ -178,12 +180,12 @@ export FFLAGS="$CFLAGS"
   --enable-shared \
   --disable-static \
   --disable-rpath
-make all V=1
+%{__make} all V=1
 
 %install
 %make_install V=1
-install -D -m 0644 %{SOURCE6} %{buildroot}%{_sysconfdir}/rpm/macros.ruby19
-install -D -m 0755 %{SOURCE7} %{buildroot}/usr/lib/rpm/gem_install_wrapper.sh
+%{__install} -D -m 0644 %{S:6} %{buildroot}/etc/rpm/macros.ruby19
+%{__install} -D -m 0755 %{S:7} %{buildroot}/usr/lib/rpm/gem_install_wrapper.sh
 
 %if 0%{?run_tests}
 %check
@@ -197,7 +199,7 @@ make check V=1 ||:
 
 %files
 %defattr(-,root,root,-)
-%config(noreplace) %{_sysconfdir}/rpm/macros.ruby19
+%config(noreplace) /etc/rpm/macros.ruby19
 %{_bindir}/erb
 %{_bindir}/gem
 %{_bindir}/irb
@@ -208,7 +210,7 @@ make check V=1 ||:
 %{_bindir}/testrb
 %{_libdir}/libruby.so.1.9*
 %{_libdir}/ruby/
-%{_libdir}/rpm/gem_install_wrapper.sh
+/usr/lib/rpm/gem_install_wrapper.sh
 %{_mandir}/man1/ri.1*
 %{_mandir}/man1/irb.1*
 %{_mandir}/man1/erb.1*
