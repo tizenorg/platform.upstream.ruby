@@ -1,0 +1,51 @@
+%rb19_binary                         /usr/bin/ruby1.9
+%rb19_arch                           %(%{rb19_binary} -e 'print RUBY_PLATFORM')
+%rb19_ver                            %(%{rb19_binary} -r rbconfig -e 'print RbConfig::CONFIG["ruby_version"]')
+#
+#rb19_dir                            %{_libdir}/ruby/
+#rb19_libdir                         %{_libdir}/ruby/%{rb19_ver}/
+#rb19_archdir                        %{_libdir}/ruby/%{rb19_ver}/%{rb19_arch}
+#
+#rb19_sitedir                        %{_libdir}/ruby/site_ruby
+#rb19_sitelib                        %{rb19_sitedir}/%{rb19_ver}
+#rb19_sitearch                       %{rb19_sitedir}/%{rb19_ver}/%{rb19_arch}
+#
+#rb19_vendordir                      %{_libdir}/ruby/vendor_ruby
+#rb19_vendorlib                      %{rb19_vendordir}/%{rb19_ver}
+#rb19_vendorarch                     %{rb19_vendordir}/%{rb19_ver}/%{rb19_arch}
+
+
+## Base
+# "rubylibprefix"=>"/usr/lib64/ruby",
+%rb19_dir           %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["rubylibprefix"]' )
+# "rubylibdir"    =>"/usr/lib64/ruby/1.9.1",
+%rb19_libdir        %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["rubylibdir"]' )
+# "archdir"       =>"/usr/lib64/ruby/1.9.1/x86_64-linux",
+%rb19_archdir       %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["archdir"]' )
+
+## Site
+# "sitedir"       =>"/usr/lib64/ruby/site_ruby",
+%rb19_sitedir       %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["sitedir"]' )
+# "sitelibdir"    =>"/usr/lib64/ruby/site_ruby/1.9.1",
+%rb19_sitelibdir    %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["sitelibdir"]' )
+# "sitearchdir"   =>"/usr/lib64/ruby/site_ruby/1.9.1/x86_64-linux",
+%rb19_sitearchdir   %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["sitearchdir"]' )
+
+## Vendor
+# "vendordir"     =>"/usr/lib64/ruby/vendor_ruby",
+%rb19_vendordir     %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["vendordir"]' )
+# "vendorlibdir"  =>"/usr/lib64/ruby/vendor_ruby/1.9.1",
+%rb19_vendorlibdir  %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["vendorlibdir"]' )
+# "vendorarchdir" =>"/usr/lib64/ruby/vendor_ruby/1.9.1/x86_64-linux",
+%rb19_vendorarchdir %(%{rb19_binary} -rrbconfig -e 'puts RbConfig::CONFIG["vendorarchdir"]' )
+
+
+%gem19_install                       /usr/lib/rpm/gem_install_wrapper.sh 
+%gem19_cleanup                       /usr/bin/gem_build_cleanup %{buildroot}%{_libdir}/ruby/gems/%{rb19_ver}/gems/%{mod_name}-%{version}/
+%rubygems19_requires() \
+%if 0%{?suse_version} > 1100 \
+%{requires_ge ruby19}      \
+%else                        \
+%{requires_eq ruby19}      \
+%endif
+
