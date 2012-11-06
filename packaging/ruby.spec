@@ -38,9 +38,6 @@ Url:            http://www.ruby-lang.org/
 Source:         ftp://ftp.ruby-lang.org/pub/ruby/1.9/ruby-%{pkg_version}-%{patch_level}.tar.bz2
 Source6:        ruby19.macros
 Source7:        gem_install_wrapper.sh
-Patch:          rubygems-1.5.0_buildroot.patch
-Patch1:         ruby-1.9.2p290_tcl_no_stupid_rpaths.patch
-Patch2:         ruby19-export_init_prelude.patch
 #
 Summary:        An Interpreted Object-Oriented Scripting Language
 License:        BSD-2-Clause or Ruby
@@ -154,9 +151,7 @@ BeOS, and more)
 
 %prep
 %setup -q -n ruby-%{pkg_version}-%{patch_level}
-%patch
-%patch1
-%patch2 -p1
+
 %if 0%{?needs_optimization_zero}
 touch -r configure configure.timestamp
 perl -p -i.bak -e 's|-O2|-O0|g' configure
