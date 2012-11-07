@@ -36,7 +36,7 @@ Provides:       ruby(abi) = %{rb_ver}
 #
 Url:            http://www.ruby-lang.org/
 Source:         ftp://ftp.ruby-lang.org/pub/ruby/1.9/ruby-%{pkg_version}-%{patch_level}.tar.bz2
-Source6:        ruby19.macros
+Source6:        ruby.macros
 Source7:        gem_install_wrapper.sh
 #
 Summary:        An Interpreted Object-Oriented Scripting Language
