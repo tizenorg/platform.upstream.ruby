@@ -89,9 +89,7 @@ Development files to link against Ruby.
 Summary:        Ruby Interactive Documentation
 Group:          Development/Languages/Ruby
 Requires:       %{name} = %{version}
-%if 0%{?suse_version} >= 1120
 BuildArch:      noarch
-%endif
 %description doc-ri
 This package contains the RI docs for ruby
 
@@ -99,9 +97,7 @@ This package contains the RI docs for ruby
 Summary:        This package contains the HTML docs for ruby
 Group:          Development/Languages/Ruby
 Requires:       %{name} = %{version}
-%if 0%{?suse_version} >= 1120
 BuildArch:      noarch
-%endif
 %description doc-html
 This package contains the HTML docs for ruby
 
@@ -117,9 +113,7 @@ Example scripts for ruby
 Requires:       %{name} = %{version}
 Summary:        An Interpreted Object-Oriented Scripting Language
 Group:          Development/Languages/Ruby
-%if 0%{?suse_version} >= 1120
 BuildArch:      noarch
-%endif
 %description test-suite
 Ruby is an interpreted scripting language for quick and easy
 object-oriented programming.  It has many features for processing text
