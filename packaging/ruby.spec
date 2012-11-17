@@ -79,7 +79,6 @@ Group:          Development/Languages/Ruby
 Requires:       %{name} = %{version}
 Provides:       rubygems19 = 1.3.7
 Provides:       rubygems19_with_buildroot_patch
-Requires:       ruby-common
 
 %description devel
 Development files to link against Ruby.
