@@ -38,6 +38,7 @@ Url:            http://www.ruby-lang.org/
 Source:         ftp://ftp.ruby-lang.org/pub/ruby/1.9/ruby-%{pkg_version}-%{patch_level}.tar.bz2
 Source6:        ruby.macros
 Source7:        gem_install_wrapper.sh
+Source1001: 	ruby.manifest
 #
 Summary:        An Interpreted Object-Oriented Scripting Language
 License:        BSD-2-Clause or Ruby
@@ -144,6 +145,7 @@ BeOS, and more)
 
 %prep
 %setup -q -n ruby-%{pkg_version}-%{patch_level}
+cp %{SOURCE1001} .
 
 %if 0%{?needs_optimization_zero}
 touch -r configure configure.timestamp
@@ -186,6 +188,7 @@ make check V=1 ||:
 %postun -p /sbin/ldconfig
 
 %files
+%manifest %{name}.manifest
 %defattr(-,root,root,-)
 %config(noreplace) /etc/rpm/macros.ruby19
 %{_bindir}/erb
@@ -207,6 +210,7 @@ make check V=1 ||:
 %doc COPYING  COPYING.ja  GPL
 
 %files devel
+%manifest %{name}.manifest
 %defattr(-,root,root,-)
 %{_includedir}/ruby-%{rb_ver}
 %{_libdir}/libruby.so
@@ -214,6 +218,7 @@ make check V=1 ||:
 
 
 %files doc-ri
+%manifest %{name}.manifest
 %defattr(-,root,root,-)
 %dir %{_datadir}/ri/
 %{_datadir}/ri/%{rb_ver}/
