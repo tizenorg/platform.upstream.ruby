@@ -1,9 +1,9 @@
 Name:           ruby
-Version:        1.9.3.p194
+Version:        1.9.3.p448
 Release:        0
 #
 %define pkg_version 1.9.3
-%define patch_level p194
+%define patch_level p448
 # keep in sync with macro file!
 %define rb_binary_suffix 1.9
 %define rb_ver  1.9.1
@@ -35,7 +35,7 @@ Provides:       rubygem-rake = 0.9.2.2
 Provides:       ruby(abi) = %{rb_ver}
 #
 Url:            http://www.ruby-lang.org/
-Source:         ftp://ftp.ruby-lang.org/pub/ruby/1.9/ruby-%{pkg_version}-%{patch_level}.tar.bz2
+Source:         ftp://ftp.ruby-lang.org/pub/ruby/1.9/ruby-%{pkg_version}-%{patch_level}.tar.gz
 Source6:        ruby.macros
 Source7:        gem_install_wrapper.sh
 Source1001: 	ruby.manifest
