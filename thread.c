@@ -2,7 +2,7 @@
 
   thread.c -
 
-  $Author: kosaki $
+  $Author: usa $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -41,6 +41,19 @@
     object or Array object, fine grain lock must be locked every time.
  */
 
+
+/*
+ * FD_SET, FD_CLR and FD_ISSET have a small sanity check when using glibc
+ * 2.15 or later and set _FORTIFY_SOURCE > 0.
+ * However, the implementation is wrong. Even though Linux's select(2)
+ * support large fd size (>FD_SETSIZE), it wrongly assume fd is always
+ * less than FD_SETSIZE (i.e. 1024). And then when enabling HAVE_RB_FD_INIT,
+ * it doesn't work correctly and makes program abort. Therefore we need to
+ * disable FORTY_SOURCE until glibc fixes it.
+ */
+#undef _FORTIFY_SOURCE
+#undef __USE_FORTIFY_LEVEL
+#define __USE_FORTIFY_LEVEL 0
 
 /* for model 2 */
 
@@ -2161,7 +2174,7 @@ thread_keys_i(ID key, VALUE value, VALUE ary)
 static int
 vm_living_thread_num(rb_vm_t *vm)
 {
-    return vm->living_threads->num_entries;
+    return (int)vm->living_threads->num_entries;
 }
 
 int
@@ -3532,6 +3545,13 @@ lock_interrupt(void *ptr)
 }
 
 /*
+ * At maximum, only one thread can use cond_timedwait and watch deadlock
+ * periodically. Multiple polling thread (i.e. concurrent deadlock check)
+ * introduces new race conditions. [Bug #6278] [ruby-core:44275]
+ */
+rb_thread_t *patrol_thread = NULL;
+
+/*
  * call-seq:
  *    mutex.lock  -> self
  *
@@ -3568,13 +3588,19 @@ rb_mutex_lock(VALUE self)
 	     * vm->sleepr is unstable value. we have to avoid both deadlock
 	     * and busy loop.
 	     */
-	    if (vm_living_thread_num(th->vm) == th->vm->sleeper) {
+	    if ((vm_living_thread_num(th->vm) == th->vm->sleeper) &&
+		!patrol_thread) {
 		timeout_ms = 100;
+		patrol_thread = th;
 	    }
+
 	    GVL_UNLOCK_BEGIN();
 	    interrupted = lock_func(th, mutex, timeout_ms);
 	    native_mutex_unlock(&mutex->lock);
 	    GVL_UNLOCK_END();
+
+	    if (patrol_thread == th)
+		patrol_thread = NULL;
 
 	    reset_unblock_function(th, &oldubf);
 
@@ -3842,17 +3868,24 @@ recursive_list_access(void)
 static VALUE
 recursive_check(VALUE list, VALUE obj_id, VALUE paired_obj_id)
 {
+#if SIZEOF_LONG == SIZEOF_VOIDP
+  #define OBJ_ID_EQL(obj_id, other) ((obj_id) == (other))
+#elif SIZEOF_LONG_LONG == SIZEOF_VOIDP
+  #define OBJ_ID_EQL(obj_id, other) (RB_TYPE_P((obj_id), T_BIGNUM) ? \
+    rb_big_eql((obj_id), (other)) : ((obj_id) == (other)))
+#endif
+
     VALUE pair_list = rb_hash_lookup2(list, obj_id, Qundef);
     if (pair_list == Qundef)
 	return Qfalse;
     if (paired_obj_id) {
 	if (TYPE(pair_list) != T_HASH) {
-	if (pair_list != paired_obj_id)
-	    return Qfalse;
+	    if (!OBJ_ID_EQL(paired_obj_id, pair_list))
+		return Qfalse;
 	}
 	else {
-	if (NIL_P(rb_hash_lookup(pair_list, paired_obj_id)))
-	    return Qfalse;
+	    if (NIL_P(rb_hash_lookup(pair_list, paired_obj_id)))
+		return Qfalse;
 	}
     }
     return Qtrue;
@@ -4040,7 +4073,7 @@ enum {
     EVENT_RUNNING_EVENT_MASK = EVENT_RUNNING_VM|EVENT_RUNNING_THREAD
 };
 
-static VALUE thread_suppress_tracing(rb_thread_t *th, int ev, VALUE (*func)(VALUE, int), VALUE arg, int always);
+static VALUE thread_suppress_tracing(rb_thread_t *th, int ev, VALUE (*func)(VALUE, int), VALUE arg, int always, int pop_p);
 
 struct event_call_args {
     rb_thread_t *th;
@@ -4179,7 +4212,7 @@ thread_exec_event_hooks(VALUE args, int running)
 }
 
 void
-rb_threadptr_exec_event_hooks(rb_thread_t *th, rb_event_flag_t flag, VALUE self, ID id, VALUE klass)
+rb_threadptr_exec_event_hooks(rb_thread_t *th, rb_event_flag_t flag, VALUE self, ID id, VALUE klass, int pop_p)
 {
     const VALUE errinfo = th->errinfo;
     struct event_call_args args;
@@ -4189,7 +4222,7 @@ rb_threadptr_exec_event_hooks(rb_thread_t *th, rb_event_flag_t flag, VALUE self,
     args.id = id;
     args.klass = klass;
     args.proc = 0;
-    thread_suppress_tracing(th, EVENT_RUNNING_EVENT_MASK, thread_exec_event_hooks, (VALUE)&args, FALSE);
+    thread_suppress_tracing(th, EVENT_RUNNING_EVENT_MASK, thread_exec_event_hooks, (VALUE)&args, FALSE, pop_p);
     th->errinfo = errinfo;
 }
 
@@ -4538,11 +4571,11 @@ VALUE
 ruby_suppress_tracing(VALUE (*func)(VALUE, int), VALUE arg, int always)
 {
     rb_thread_t *th = GET_THREAD();
-    return thread_suppress_tracing(th, EVENT_RUNNING_TRACE, func, arg, always);
+    return thread_suppress_tracing(th, EVENT_RUNNING_TRACE, func, arg, always, 0);
 }
 
 static VALUE
-thread_suppress_tracing(rb_thread_t *th, int ev, VALUE (*func)(VALUE, int), VALUE arg, int always)
+thread_suppress_tracing(rb_thread_t *th, int ev, VALUE (*func)(VALUE, int), VALUE arg, int always, int pop_p)
 {
     int state, tracing = th->tracing, running = tracing & ev;
     volatile int raised;
@@ -4572,6 +4605,9 @@ thread_suppress_tracing(rb_thread_t *th, int ev, VALUE (*func)(VALUE, int), VALU
 
     th->tracing = tracing;
     if (state) {
+	if (pop_p) {
+	    th->cfp = RUBY_VM_PREVIOUS_CONTROL_FRAME(th->cfp);
+	}
 	JUMP_TAG(state);
     }
     th->state = outer_state;
@@ -4780,6 +4816,7 @@ rb_check_deadlock(rb_vm_t *vm)
 
     if (vm_living_thread_num(vm) > vm->sleeper) return;
     if (vm_living_thread_num(vm) < vm->sleeper) rb_bug("sleeper must not be more than vm_living_thread_num(vm)");
+    if (patrol_thread && patrol_thread != GET_THREAD()) return;
 
     st_foreach(vm->living_threads, check_deadlock_i, (st_data_t)&found);
 

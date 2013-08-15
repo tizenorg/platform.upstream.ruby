@@ -101,6 +101,15 @@ function_call(int argc, VALUE argv[], VALUE self)
 
     TypedData_Get_Struct(self, ffi_cif, &function_data_type, cif);
 
+    if (rb_safe_level() >= 1) {
+	for (i = 0; i < argc; i++) {
+	    VALUE src = argv[i];
+	    if (OBJ_TAINTED(src)) {
+		rb_raise(rb_eSecurityError, "tainted parameter not allowed");
+	    }
+	}
+    }
+
     values = xcalloc((size_t)argc + 1, (size_t)sizeof(void *));
     generic_args = xcalloc((size_t)argc, (size_t)sizeof(fiddle_generic));
 
@@ -179,7 +188,7 @@ Init_fiddle_function(void)
      */
     rb_define_const(cFiddleFunction, "DEFAULT", INT2NUM(FFI_DEFAULT_ABI));
 
-#ifdef FFI_STDCALL
+#ifdef HAVE_CONST_FFI_STDCALL
     /*
      * Document-const: STDCALL
      *
@@ -203,7 +212,7 @@ Init_fiddle_function(void)
 
     /*
      * Document-method: new
-     * call-seq: new(ptr, *args, ret_type, abi = DEFAULT)
+     * call-seq: new(ptr, args, ret_type, abi = DEFAULT)
      *
      * Constructs a Function object.
      * * +ptr+ is a referenced function, of a DL::Handle

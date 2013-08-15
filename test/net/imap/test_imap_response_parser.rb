@@ -116,4 +116,29 @@ EOF
 * 1 FETCH (UID 92285  )
 EOF
   end
+
+  # [Bug #8281]
+  def test_acl
+    parser = Net::IMAP::ResponseParser.new
+    response = parser.parse(<<EOF.gsub(/\n/, "\r\n").taint)
+* ACL "INBOX/share" "imshare2copy1366146467@xxxxxxxxxxxxxxxxxx.com" lrswickxteda
+EOF
+    assert_equal("ACL", response.name)
+    assert_equal(1, response.data.length)
+    assert_equal("INBOX/share", response.data[0].mailbox)
+    assert_equal("imshare2copy1366146467@xxxxxxxxxxxxxxxxxx.com",
+                 response.data[0].user)
+    assert_equal("lrswickxteda", response.data[0].rights)
+  end
+
+  # [Bug #8415]
+  def test_capability
+    parser = Net::IMAP::ResponseParser.new
+    response = parser.parse("* CAPABILITY st11p00mm-iscream009 1Q49 XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN\r\n")
+    assert_equal("CAPABILITY", response.name)
+    assert_equal("AUTH=PLAIN", response.data.last)
+    response = parser.parse("* CAPABILITY st11p00mm-iscream009 1Q49 XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN \r\n")
+    assert_equal("CAPABILITY", response.name)
+    assert_equal("AUTH=PLAIN", response.data.last)
+  end
 end

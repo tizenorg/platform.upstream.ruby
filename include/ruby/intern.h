@@ -2,7 +2,7 @@
 
   intern.h -
 
-  $Author: nobu $
+  $Author: usa $
   created at: Thu Jun 10 14:22:17 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -31,6 +31,15 @@ extern "C" {
 #else
 # include <varargs.h>
 #endif
+
+#if defined(HAVE_SYS_TYPES_H)
+#include <sys/types.h>
+#endif
+
+#if defined(HAVE_SYS_TIME_H)
+#include <sys/time.h>
+#endif
+
 #include "ruby/st.h"
 
 #if defined __GNUC__ && __GNUC__ >= 4
@@ -122,6 +131,7 @@ VALUE rb_dbl2big(double);
 double rb_big2dbl(VALUE);
 VALUE rb_big_cmp(VALUE, VALUE);
 VALUE rb_big_eq(VALUE, VALUE);
+VALUE rb_big_eql(VALUE, VALUE);
 VALUE rb_big_plus(VALUE, VALUE);
 VALUE rb_big_minus(VALUE, VALUE);
 VALUE rb_big_mul(VALUE, VALUE);
@@ -160,7 +170,6 @@ VALUE rb_Complex(VALUE, VALUE);
 VALUE rb_class_boot(VALUE);
 VALUE rb_class_new(VALUE);
 VALUE rb_mod_init_copy(VALUE, VALUE);
-VALUE rb_class_init_copy(VALUE, VALUE);
 VALUE rb_singleton_class_clone(VALUE);
 void rb_singleton_class_attached(VALUE,VALUE);
 VALUE rb_make_metaclass(VALUE, VALUE);
@@ -341,7 +350,7 @@ VALUE rb_require_safe(VALUE, int);
 void rb_obj_call_init(VALUE, int, VALUE*);
 VALUE rb_class_new_instance(int, VALUE*, VALUE);
 VALUE rb_block_proc(void);
-VALUE rb_f_lambda(void);
+VALUE rb_block_lambda(void);
 VALUE rb_proc_new(VALUE (*)(ANYARGS/* VALUE yieldarg[, VALUE procarg] */), VALUE);
 VALUE rb_obj_is_proc(VALUE);
 VALUE rb_proc_call(VALUE, VALUE);
@@ -352,6 +361,7 @@ VALUE rb_binding_new(void);
 VALUE rb_obj_method(VALUE, VALUE);
 VALUE rb_obj_is_method(VALUE);
 VALUE rb_method_call(int, VALUE*, VALUE);
+VALUE rb_method_call_with_block(int, VALUE *, VALUE, VALUE);
 int rb_mod_method_arity(VALUE, ID);
 int rb_obj_method_arity(VALUE, ID);
 VALUE rb_protect(VALUE (*)(VALUE), VALUE, int*);
@@ -402,15 +412,9 @@ int rb_find_file_ext_safe(VALUE*, const char* const*, int);
 VALUE rb_find_file_safe(VALUE, int);
 int rb_find_file_ext(VALUE*, const char* const*);
 VALUE rb_find_file(VALUE);
-char *rb_path_next(const char *);
-char *rb_path_skip_prefix(const char *);
-char *rb_path_last_separator(const char *);
-char *rb_path_end(const char *);
 VALUE rb_file_directory_p(VALUE,VALUE);
 VALUE rb_str_encode_ospath(VALUE);
 int rb_is_absolute_path(const char *);
-const char *ruby_find_basename(const char *name, long *baselen, long *alllen);
-const char *ruby_find_extname(const char *name, long *len);
 /* gc.c */
 void ruby_set_stack_size(size_t);
 NORETURN(void rb_memerror(void));
@@ -492,7 +496,7 @@ VALUE rb_marshal_dump(VALUE, VALUE);
 VALUE rb_marshal_load(VALUE);
 void rb_marshal_define_compat(VALUE newclass, VALUE oldclass, VALUE (*dumper)(VALUE), VALUE (*loader)(VALUE, VALUE));
 /* numeric.c */
-void rb_num_zerodiv(void);
+NORETURN(void rb_num_zerodiv(void));
 #define RB_NUM_COERCE_FUNCS_NEED_OPID 1
 VALUE rb_num_coerce_bin(VALUE, VALUE, ID);
 VALUE rb_num_coerce_cmp(VALUE, VALUE, ID);

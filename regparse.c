@@ -579,7 +579,7 @@ onig_number_of_names(regex_t* reg)
   NameTable* t = (NameTable* )reg->name_table;
 
   if (IS_NOT_NULL(t))
-    return t->num_entries;
+    return (int)t->num_entries;
   else
     return 0;
 }
@@ -4491,7 +4491,7 @@ parse_char_class(Node** np, OnigToken* tok, UChar** src, UChar* end,
 
 	if (IS_SYNTAX_BV(env->syntax, ONIG_SYN_ALLOW_DOUBLE_RANGE_OP_IN_CC)) {
 	  CC_ESC_WARN(env, (UChar* )"-");
-	  goto sb_char;   /* [0-9-a] is allowed as [0-9\-a] */
+	  goto range_end_val; /* [0-9-a] is allowed as [0-9\-a] */
 	}
 	r = ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS;
 	goto err;

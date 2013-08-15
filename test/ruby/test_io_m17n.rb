@@ -2067,7 +2067,17 @@ EOT
       open("a", "wb") {|f| f.puts "a"}
       open("a", "rt") {|f| f.getc}
     }
-    assert(c.ascii_only?, "should be ascii_only #{bug4557}")
+    assert(c.ascii_only?, bug4557)
+  end
+
+  def test_getc_conversion
+    bug8516 = '[ruby-core:55444] [Bug #8516]'
+    c = with_tmpdir {
+      open("a", "wb") {|f| f.putc "\xe1"}
+      open("a", "r:iso-8859-1:utf-8") {|f| f.getc}
+    }
+    refute(c.ascii_only?, bug8516)
+    assert_equal(1, c.size, bug8516)
   end
 
   def test_default_mode_on_dosish
@@ -2359,6 +2369,22 @@ EOT
         assert_equal("line two\n", f.readline, bug6179)
         assert_equal(20, f.pos, bug6179)
         assert_equal("line three\n", f.readline, bug6179)
+      end
+    }
+  end if /mswin|mingw/ =~ RUBY_PLATFORM
+
+  def test_pos_with_buffer_end_cr
+    bug6401 = '[ruby-core:44874]'
+    with_tmpdir {
+      # Read buffer size is 8191. This generates '\r' at 8191.
+      lines = ["X" * 8187, "X"]
+      generate_file("tmp", lines.join("\r\n") + "\r\n")
+
+      open("tmp", "r") do |f|
+        lines.each do |line|
+          f.pos
+          assert_equal(line, f.readline.chomp, bug6401)
+        end
       end
     }
   end if /mswin|mingw/ =~ RUBY_PLATFORM

@@ -619,14 +619,14 @@ def try_func(func, libs, headers = nil, &b)
   try_link(<<"SRC", libs, &b) or
 #{headers}
 /*top*/
-#{MAIN_DOES_NOTHING}
 int t() { #{decltype["volatile p"]}; p = (#{decltype[]})#{func}; return 0; }
+#{MAIN_DOES_NOTHING "t"}
 SRC
   call && try_link(<<"SRC", libs, &b)
 #{headers}
 /*top*/
-#{MAIN_DOES_NOTHING}
 int t() { #{func}(); return 0; }
+#{MAIN_DOES_NOTHING "t"}
 SRC
 end
 
@@ -636,8 +636,8 @@ def try_var(var, headers = nil, &b)
   try_compile(<<"SRC", &b)
 #{headers}
 /*top*/
-#{MAIN_DOES_NOTHING}
 int t() { const volatile void *volatile p; p = &(&#{var})[0]; return 0; }
+#{MAIN_DOES_NOTHING "t"}
 SRC
 end
 
@@ -1002,8 +1002,8 @@ def have_struct_member(type, member, headers = nil, &b)
     if try_compile(<<"SRC", &b)
 #{cpp_include(headers)}
 /*top*/
-#{MAIN_DOES_NOTHING}
 int s = (char *)&((#{type}*)0)->#{member} - (char *)0;
+#{MAIN_DOES_NOTHING "s"}
 SRC
       $defs.push(format("-DHAVE_%s_%s", type.tr_cpp, member.tr_cpp))
       $defs.push(format("-DHAVE_ST_%s", member.tr_cpp)) # backward compatibility
@@ -1243,8 +1243,8 @@ def scalar_ptr_type?(type, member = nil, headers = nil, &b)
 #{cpp_include(headers)}
 /*top*/
 volatile #{type} conftestval;
-#{MAIN_DOES_NOTHING}
 int t() {return (int)(1-*(conftestval#{member ? ".#{member}" : ""}));}
+#{MAIN_DOES_NOTHING "t"}
 SRC
 end
 
@@ -1255,8 +1255,8 @@ def scalar_type?(type, member = nil, headers = nil, &b)
 #{cpp_include(headers)}
 /*top*/
 volatile #{type} conftestval;
-#{MAIN_DOES_NOTHING}
 int t() {return (int)(1-(conftestval#{member ? ".#{member}" : ""}));}
+#{MAIN_DOES_NOTHING "t"}
 SRC
 end
 
@@ -1526,7 +1526,7 @@ def dir_config(target, idefault=nil, ldefault=nil)
   idir = with_config(target + "-include", idefault)
   $arg_config.last[1] ||= "${#{target}-dir}/include"
   ldir = with_config(target + "-lib", ldefault)
-  $arg_config.last[1] ||= "${#{target}-dir}/lib"
+  $arg_config.last[1] ||= "${#{target}-dir}/#{@libdir_basename}"
 
   idirs = idir ? Array === idir ? idir.dup : idir.split(File::PATH_SEPARATOR) : []
   if defaults
@@ -1543,7 +1543,7 @@ def dir_config(target, idefault=nil, ldefault=nil)
 
   ldirs = ldir ? Array === ldir ? ldir.dup : ldir.split(File::PATH_SEPARATOR) : []
   if defaults
-    ldirs.concat(defaults.collect {|d| d + "/lib"})
+      ldirs.concat(defaults.collect {|d| "#{d}/#{@libdir_basename}"})
     ldir = ([ldir] + ldirs).compact.join(File::PATH_SEPARATOR)
   end
   $LIBPATH = ldirs | $LIBPATH
@@ -1687,8 +1687,9 @@ LIBRUBY = #{CONFIG['LIBRUBY']}
 LIBRUBY_A = #{CONFIG['LIBRUBY_A']}
 LIBRUBYARG_SHARED = #$LIBRUBYARG_SHARED
 LIBRUBYARG_STATIC = #$LIBRUBYARG_STATIC
-OUTFLAG = #{OUTFLAG}
-COUTFLAG = #{COUTFLAG}
+empty =
+OUTFLAG = #{OUTFLAG}$(empty)
+COUTFLAG = #{COUTFLAG}$(empty)
 
 RUBY_EXTCONF_H = #{$extconf_h}
 cflags   = #{CONFIG['cflags']}
@@ -1701,7 +1702,7 @@ DEFS     = #{CONFIG['DEFS']}
 CPPFLAGS = #{extconf_h}#{$CPPFLAGS}
 CXXFLAGS = $(CFLAGS) #{CONFIG['CXXFLAGS']}
 ldflags  = #{$LDFLAGS}
-dldflags = #{$DLDFLAGS}
+dldflags = #{$DLDFLAGS} #{CONFIG['EXTDLDFLAGS']}
 ARCH_FLAG = #{$ARCH_FLAG}
 DLDFLAGS = $(ldflags) $(dldflags) $(ARCH_FLAG)
 LDSHARED = #{CONFIG['LDSHARED']}
@@ -1725,6 +1726,7 @@ INSTALL = #{config_string('INSTALL', &possible_command) || '@$(RUBY) -run -e ins
 INSTALL_PROG = #{config_string('INSTALL_PROG') || '$(INSTALL) -m 0755'}
 INSTALL_DATA = #{config_string('INSTALL_DATA') || '$(INSTALL) -m 0644'}
 COPY = #{config_string('CP', &possible_command) || '@$(RUBY) -run -e cp -- -v'}
+TOUCH = exit >
 
 #### End of system configuration section. ####
 
@@ -1740,6 +1742,11 @@ preload = #{defined?($preload) && $preload ? $preload.join(' ') : ''}
     end
   end
   mk
+end
+
+def timestamp_file(name)
+  name = name.gsub(/(\$[({]|[})])|(\/+)|[^-.\w]+/) {$1 ? "" : $2 ? ".-." : "_"}
+  "./.#{name}.time"
 end
 # :startdoc:
 
@@ -1918,7 +1925,7 @@ def create_makefile(target, srcprefix = nil)
         makedef = %{-pe "$_.sub!(/^(?=\\w)/,'#{EXPORT_PREFIX}') unless 1../^EXPORTS$/i"}
       end
     else
-      makedef = %{-e "puts 'EXPORTS', '#{EXPORT_PREFIX}' + 'Init_$(TARGET)'.sub(/\\..*\\z/,'')"}
+      makedef = %{-e "puts 'EXPORTS', '$(TARGET_ENTRY)'"}
     end
     if makedef
       $cleanfiles << '$(DEFFILE)'
@@ -1962,6 +1969,8 @@ LIBS = #{$LIBRUBYARG} #{$libs} #{$LIBS}
 SRCS = #{srcs.collect(&File.method(:basename)).join(' ')}
 OBJS = #{$objs.join(" ")}
 TARGET = #{target}
+TARGET_NAME = #{target && target[/\A\w+/]}
+TARGET_ENTRY = #{EXPORT_PREFIX || ''}Init_$(TARGET_NAME)
 DLLIB = #{dllib}
 EXTSTATIC = #{$static || ""}
 STATIC_LIB = #{staticlib unless $static.nil?}
@@ -2002,18 +2011,20 @@ static: $(STATIC_LIB)#{$extout ? " install-rb" : ""}
   if target
     f = "$(DLLIB)"
     dest = "#{dir}/#{f}"
-    mfile.puts dir, "install-so: #{dest}"
+    mfile.puts dest
     if $extout
       mfile.print "clean-so::\n"
-      mfile.print "\t@-$(RM) #{fseprepl[dest]}\n"
-      mfile.print "\t@-$(RMDIRS) #{fseprepl[dir]}#{$ignore_error}\n"
+      mfile.print "\t-$(Q)$(RM) #{fseprepl[dest]}\n"
+      mfile.print "\t-$(Q)$(RMDIRS) #{fseprepl[dir]}#{$ignore_error}\n"
     else
-      mfile.print "#{dest}: #{f}\n\t@-$(MAKEDIRS) $(@D#{sep})\n"
+      mfile.print "#{dest}: #{f}\n\t-$(Q)$(MAKEDIRS) $(@D#{sep})\n"
       mfile.print "\t$(INSTALL_PROG) #{fseprepl[f]} $(@D#{sep})\n"
       if defined?($installed_list)
         mfile.print "\t@echo #{dir}/#{File.basename(f)}>>$(INSTALLED_LIST)\n"
       end
     end
+    mfile.print "clean-static::\n"
+    mfile.print "\t-$(Q)$(RM) $(STATIC_LIB)\n"
   else
     mfile.puts "Makefile"
   end
@@ -2026,7 +2037,7 @@ static: $(STATIC_LIB)#{$extout ? " install-rb" : ""}
     for dir, *files in files
       unless dirs.include?(dir)
         dirs << dir
-        mfile.print "pre-install-rb#{sfx}: #{dir}\n"
+        mfile.print "pre-install-rb#{sfx}: #{timestamp_file(dir)}\n"
       end
       for f in files
         dest = "#{dir}/#{File.basename(f)}"
@@ -2055,7 +2066,10 @@ static: $(STATIC_LIB)#{$extout ? " install-rb" : ""}
     end
   end
   dirs.unshift(sodir) if target and !dirs.include?(sodir)
-  dirs.each {|d| mfile.print "#{d}:\n\t$(Q) $(MAKEDIRS) $@\n"}
+  dirs.each do |d|
+    t = timestamp_file(d)
+    mfile.print "#{t}:\n\t$(Q) $(MAKEDIRS) #{d}\n\t$(Q) $(TOUCH) $@\n"
+  end
 
   mfile.print <<-SITEINSTALL
 
@@ -2088,10 +2102,11 @@ site-install-rb: install-rb
   mfile.print "$(RUBYARCHDIR)/" if $extout
   mfile.print "$(DLLIB): "
   mfile.print "$(DEFFILE) " if makedef
-  mfile.print "$(OBJS) Makefile\n"
+  mfile.print "$(OBJS) Makefile"
+  mfile.print " #{timestamp_file('$(RUBYARCHDIR)')}" if $extout
+  mfile.print "\n"
   mfile.print "\t$(ECHO) linking shared-object #{target_prefix.sub(/\A\/(.*)/, '\1/')}$(DLLIB)\n"
-  mfile.print "\t@-$(RM) $(@#{sep})\n"
-  mfile.print "\t@-$(MAKEDIRS) $(@D)\n" if $extout
+  mfile.print "\t-$(Q)$(RM) $(@#{sep})\n"
   link_so = LINK_SO.gsub(/^/, "\t$(Q) ")
   if srcs.any?(&%r"\.(?:#{CXX_EXT.join('|')})\z".method(:===))
     link_so = link_so.sub(/\bLDSHARED\b/, '\&XX')
@@ -2185,6 +2200,8 @@ def init_mkmf(config = CONFIG, rbconfig = RbConfig::CONFIG)
   $extout ||= nil
   $extout_prefix ||= nil
 
+  @libdir_basename = config["libdir"] && config["libdir"][/\A\$\(exec_prefix\)\/(.*)/, 1] or "lib"
+
   $arg_config.clear
   dir_config("opt")
 end
@@ -2207,6 +2224,19 @@ def mkmf_failed(path)
     opts = $arg_config.collect {|t, n| "\t#{t}#{n ? "=#{n}" : ""}\n"}
     abort "*** #{path} failed ***\n" + FailedMessage + opts.join
   end
+end
+
+def MAIN_DOES_NOTHING(*refs)
+  src = MAIN_DOES_NOTHING
+  unless refs.empty?
+    src = src.sub(/\{/) do
+      $& +
+        "\n  if (argc > 1000000) {\n" +
+        refs.map {|n|"    printf(\"%p\", &#{n});\n"}.join("") +
+        "  }\n"
+    end
+  end
+  src
 end
 
 # :startdoc:
@@ -2275,17 +2305,18 @@ LINK_SO = config_string('LINK_SO') ||
 LIBPATHFLAG = config_string('LIBPATHFLAG') || ' -L"%s"'
 RPATHFLAG = config_string('RPATHFLAG') || ''
 LIBARG = config_string('LIBARG') || '-l%s'
-MAIN_DOES_NOTHING = config_string('MAIN_DOES_NOTHING') || 'int main() {return 0;}'
+MAIN_DOES_NOTHING = config_string('MAIN_DOES_NOTHING') || "int main(int argc, char **argv)\n{\n  return 0;\n}"
 UNIVERSAL_INTS = config_string('UNIVERSAL_INTS') {|s| Shellwords.shellwords(s)} ||
   %w[int short long long\ long]
 
 sep = config_string('BUILD_FILE_SEPARATOR') {|s| ":/=#{s}" if s != "/"} || ""
 CLEANINGS = "
+clean-static::
 clean-rb-default::
 clean-rb::
 clean-so::
-clean: clean-so clean-rb-default clean-rb
-\t\t@-$(RM) $(CLEANLIBS#{sep}) $(CLEANOBJS#{sep}) $(CLEANFILES#{sep})
+clean: clean-so clean-static clean-rb-default clean-rb
+\t\t-$(Q)$(RM) $(CLEANLIBS#{sep}) $(CLEANOBJS#{sep}) $(CLEANFILES#{sep}) .*.time
 
 distclean-rb-default::
 distclean-rb::

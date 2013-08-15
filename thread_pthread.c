@@ -3,7 +3,7 @@
 
   thread_pthread.c -
 
-  $Author: naruse $
+  $Author: usa $
 
   Copyright (C) 2004-2007 Koichi Sasada
 
@@ -23,6 +23,9 @@
 #include <fcntl.h>
 #elif HAVE_SYS_FCNTL_H
 #include <sys/fcntl.h>
+#endif
+#if defined(HAVE_SYS_TIME_H)
+#include <sys/time.h>
 #endif
 
 static void native_mutex_lock(pthread_mutex_t *lock);
@@ -140,6 +143,7 @@ gvl_init(rb_vm_t *vm)
     vm->gvl.acquired = 0;
     vm->gvl.waiting = 0;
     vm->gvl.need_yield = 0;
+    vm->gvl.wait_yield = 0;
 }
 
 static void
@@ -248,6 +252,7 @@ native_cond_initialize(rb_thread_cond_t *cond, int flags)
 #endif
 
     r = pthread_cond_init(&cond->cond, &attr);
+    pthread_condattr_destroy(&attr);
     if (r != 0) {
 	rb_bug_errno("pthread_cond_init", r);
     }
@@ -477,41 +482,38 @@ get_stack(void **addr, size_t *size)
 {
 #define CHECK_ERR(expr)				\
     {int err = (expr); if (err) return err;}
-#if defined HAVE_PTHREAD_GETATTR_NP || defined HAVE_PTHREAD_ATTR_GET_NP || \
-    (defined HAVE_PTHREAD_GET_STACKADDR_NP && defined HAVE_PTHREAD_GET_STACKSIZE_NP)
+#ifdef HAVE_PTHREAD_GETATTR_NP /* Linux */
     pthread_attr_t attr;
     size_t guard = 0;
-
-# ifdef HAVE_PTHREAD_GETATTR_NP /* Linux */
     STACK_GROW_DIR_DETECTION;
     CHECK_ERR(pthread_getattr_np(pthread_self(), &attr));
-#   ifdef HAVE_PTHREAD_ATTR_GETSTACK
+# ifdef HAVE_PTHREAD_ATTR_GETSTACK
     CHECK_ERR(pthread_attr_getstack(&attr, addr, size));
     STACK_DIR_UPPER((void)0, (void)(*addr = (char *)*addr + *size));
-#   else
+# else
     CHECK_ERR(pthread_attr_getstackaddr(&attr, addr));
     CHECK_ERR(pthread_attr_getstacksize(&attr, size));
-#   endif
-# elif defined HAVE_PTHREAD_ATTR_GET_NP /* FreeBSD, DragonFly BSD, NetBSD */
-    CHECK_ERR(pthread_attr_init(&attr));
-    CHECK_ERR(pthread_attr_get_np(pthread_self(), &attr));
-#   ifdef HAVE_PTHREAD_ATTR_GETSTACK
-    CHECK_ERR(pthread_attr_getstack(&attr, addr, size));
-    STACK_DIR_UPPER((void)0, (void)(*addr = (char *)*addr + *size));
-#   else
-    CHECK_ERR(pthread_attr_getstackaddr(&attr, addr));
-    CHECK_ERR(pthread_attr_getstacksize(&attr, size));
-    STACK_DIR_UPPER((void)0, (void)(*addr = (char *)*addr + *size));
-#   endif
-# else /* MacOS X */
-    pthread_t th = pthread_self();
-    *addr = pthread_get_stackaddr_np(th);
-    *size = pthread_get_stacksize_np(th);
-    CHECK_ERR(pthread_attr_init(&attr));
 # endif
     CHECK_ERR(pthread_attr_getguardsize(&attr, &guard));
     *size -= guard;
     pthread_attr_destroy(&attr);
+#elif defined HAVE_PTHREAD_ATTR_GET_NP /* FreeBSD, DragonFly BSD, NetBSD */
+    pthread_attr_t attr;
+    CHECK_ERR(pthread_attr_init(&attr));
+    CHECK_ERR(pthread_attr_get_np(pthread_self(), &attr));
+# ifdef HAVE_PTHREAD_ATTR_GETSTACK
+    CHECK_ERR(pthread_attr_getstack(&attr, addr, size));
+    STACK_DIR_UPPER((void)0, (void)(*addr = (char *)*addr + *size));
+# else
+    CHECK_ERR(pthread_attr_getstackaddr(&attr, addr));
+    CHECK_ERR(pthread_attr_getstacksize(&attr, size));
+    STACK_DIR_UPPER((void)0, (void)(*addr = (char *)*addr + *size));
+# endif
+    pthread_attr_destroy(&attr);
+#elif (defined HAVE_PTHREAD_GET_STACKADDR_NP && defined HAVE_PTHREAD_GET_STACKSIZE_NP) /* MacOS X */
+    pthread_t th = pthread_self();
+    *addr = pthread_get_stackaddr_np(th);
+    *size = pthread_get_stacksize_np(th);
 #elif defined HAVE_THR_STKSEGMENT || defined HAVE_PTHREAD_STACKSEG_NP
     stack_t stk;
 # if defined HAVE_THR_STKSEGMENT /* Solaris */
@@ -581,16 +583,18 @@ ruby_init_stack(volatile VALUE *addr
     {
 	size_t size = 0;
 	size_t space = 0;
-#if defined(HAVE_PTHREAD_ATTR_GET_NP)
-	void* addr;
-	get_stack(&addr, &size);
+#if defined(STACKADDR_AVAILABLE)
+	void* stackaddr;
+	STACK_GROW_DIR_DETECTION;
+	get_stack(&stackaddr, &size);
+	space = STACK_DIR_UPPER((char *)addr - (char *)stackaddr, (char *)stackaddr - (char *)addr);
 #elif defined(HAVE_GETRLIMIT)
 	struct rlimit rlim;
 	if (getrlimit(RLIMIT_STACK, &rlim) == 0) {
 	    size = (size_t)rlim.rlim_cur;
 	}
-#endif
 	space = size > 5 * 1024 * 1024 ? 1024 * 1024 : size / 5;
+#endif
 	native_main_thread.stack_maxsize = size - space;
     }
 }
@@ -1310,7 +1314,7 @@ ruby_stack_overflowed_p(const rb_thread_t *th, const void *addr)
     }
     size /= 5;
     if (size > water_mark) size = water_mark;
-    if (STACK_DIR_UPPER(1, 0)) {
+    if (IS_STACK_DIR_UPPER()) {
 	if (size > ~(size_t)base+1) size = ~(size_t)base+1;
 	if (addr > base && addr <= (void *)((char *)base + size)) return 1;
     }

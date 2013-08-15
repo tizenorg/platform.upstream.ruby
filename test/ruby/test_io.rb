@@ -1799,7 +1799,7 @@ End
       }
     end
   ensure
-    fds.each {|fd| IO.for_fd(fd).close rescue next}
+    GC.start
   end
 
   def test_flush_in_finalizer2
@@ -1951,15 +1951,18 @@ End
 
   def test_open_mode
     feature4742 = "[ruby-core:36338]"
+    bug6055 = '[ruby-dev:45268]'
 
     mkcdtmpdir do
-      refute_nil(f = File.open('symbolic', 'w'))
+      assert_not_nil(f = File.open('symbolic', 'w'))
       f.close
-      refute_nil(f = File.open('numeric',  File::WRONLY|File::TRUNC|File::CREAT))
+      assert_not_nil(f = File.open('numeric',  File::WRONLY|File::TRUNC|File::CREAT))
       f.close
-      refute_nil(f = File.open('hash-symbolic', :mode => 'w'))
+      assert_not_nil(f = File.open('hash-symbolic', :mode => 'w'))
       f.close
-      refute_nil(f = File.open('hash-numeric', :mode => File::WRONLY|File::TRUNC|File::CREAT), feature4742)
+      assert_not_nil(f = File.open('hash-numeric', :mode => File::WRONLY|File::TRUNC|File::CREAT), feature4742)
+      f.close
+      assert_nothing_raised(bug6055) {f = File.open('hash-symbolic', binmode: true)}
       f.close
     end
   end
@@ -2039,4 +2042,140 @@ End
     write_file.close
     file.close!
   end
+
+  def test_ioctl_linux
+    return if /linux/ !~ RUBY_PLATFORM
+
+    assert_nothing_raised do
+      File.open('/dev/urandom'){|f1|
+        entropy_count = ""
+        # get entropy count
+        f1.ioctl(0x80045200, entropy_count)
+      }
+    end
+
+    buf = ''
+    assert_nothing_raised do
+      fionread = 0x541B
+      File.open(__FILE__){|f1|
+        f1.ioctl(fionread, buf)
+      }
+    end
+    assert_equal(File.size(__FILE__), buf.unpack('i!')[0])
+  end
+
+  def test_ioctl_linux2
+    return if /linux/ !~ RUBY_PLATFORM
+    return if /^i.?86|^x86_64/ !~ RUBY_PLATFORM
+
+    return unless system('tty', '-s') # stdin is not a terminal
+    File.open('/dev/tty') { |f|
+      tiocgwinsz=0x5413
+      winsize=""
+      assert_nothing_raised {
+        f.ioctl(tiocgwinsz, winsize)
+      }
+    }
+  end
+
+  def test_setpos
+    mkcdtmpdir {
+      File.open("tmp.txt", "w") {|f|
+        f.puts "a"
+        f.puts "bc"
+        f.puts "def"
+      }
+      pos1 = pos2 = pos3 = nil
+      File.open("tmp.txt") {|f|
+        assert_equal("a\n", f.gets)
+        pos1 = f.pos
+        assert_equal("bc\n", f.gets)
+        pos2 = f.pos
+        assert_equal("def\n", f.gets)
+        pos3 = f.pos
+        assert_equal(nil, f.gets)
+      }
+      File.open("tmp.txt") {|f|
+        f.pos = pos1
+        assert_equal("bc\n", f.gets)
+        assert_equal("def\n", f.gets)
+        assert_equal(nil, f.gets)
+      }
+      File.open("tmp.txt") {|f|
+        f.pos = pos2
+        assert_equal("def\n", f.gets)
+        assert_equal(nil, f.gets)
+      }
+      File.open("tmp.txt") {|f|
+        f.pos = pos3
+        assert_equal(nil, f.gets)
+      }
+    }
+  end
+
+  def test_std_fileno
+    assert_equal(0, STDIN.fileno)
+    assert_equal(1, STDOUT.fileno)
+    assert_equal(2, STDERR.fileno)
+    assert_equal(0, $stdin.fileno)
+    assert_equal(1, $stdout.fileno)
+    assert_equal(2, $stderr.fileno)
+  end
+
+  def test_io_select_with_many_files
+    bug8080 = '[ruby-core:53349]'
+
+    assert_normal_exit %q{
+      require "tempfile"
+
+      # try to raise RLIM_NOFILE to >FD_SETSIZE
+      # Unfortunately, ruby export FD_SETSIZE. then we assume it's 1024.
+      fd_setsize = 1024
+
+      begin
+        Process.setrlimit(Process::RLIMIT_NOFILE, fd_setsize+10)
+      rescue =>e
+        # Process::RLIMIT_NOFILE couldn't be raised. skip the test
+        exit 0
+      end
+
+      tempfiles = []
+      (0..fd_setsize+1).map {|i|
+        tempfiles << Tempfile.open("test_io_select_with_many_files")
+      }
+
+      IO.select(tempfiles)
+  }, bug8080
+  end
+
+  def test_read_32bit_boundary
+    bug8431 = '[ruby-core:55098] [Bug #8431]'
+    make_tempfile {|t|
+      assert_separately(["-", bug8431, t.path], <<-"end;")
+        msg = ARGV.shift
+        f = open(ARGV[0], "rb")
+        f.seek(0xffff_ffff)
+        assert_nil(f.read(1), msg)
+      end;
+    }
+  end if /mswin|mingw/ =~ RUBY_PLATFORM
+
+  def test_write_32bit_boundary
+    bug8431 = '[ruby-core:55098] [Bug #8431]'
+    make_tempfile {|t|
+      assert_separately(["-", bug8431, t.path], <<-"end;", timeout: 30)
+        msg = ARGV.shift
+        f = open(ARGV[0], "wb")
+        f.seek(0xffff_ffff)
+        begin
+          # this will consume very long time or fail by ENOSPC on a
+          # filesystem which sparse file is not supported
+          f.write('1')
+        rescue SystemCallError
+        else
+          assert_equal(0x1_0000_0000, f.tell, msg)
+        end
+      end;
+    }
+  end if /mswin|mingw/ =~ RUBY_PLATFORM
 end

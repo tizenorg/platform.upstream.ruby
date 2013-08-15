@@ -515,7 +515,7 @@ st_add_direct(st_table *table, st_data_t key, st_data_t value)
     st_index_t hash_val, bin_pos;
 
     if (table->entries_packed) {
-        int i;
+        st_index_t i;
         if (MORE_PACKABLE_P(table)) {
             i = table->num_entries++;
             table->bins[i*2] = (struct st_table_entry*)key;
@@ -691,6 +691,45 @@ st_delete_safe(register st_table *table, register st_data_t *key, st_data_t *val
 	}
     }
 
+    if (value != 0) *value = 0;
+    return 0;
+}
+
+int
+st_shift(register st_table *table, register st_data_t *key, st_data_t *value)
+{
+    st_index_t hash_val;
+    st_table_entry **prev;
+    register st_table_entry *ptr;
+
+    if (table->num_entries == 0) {
+        if (value != 0) *value = 0;
+        return 0;
+    }
+
+    if (table->entries_packed) {
+        if (value != 0) *value = (st_data_t)table->bins[1];
+        *key = (st_data_t)table->bins[0];
+        table->num_entries--;
+        memmove(&table->bins[0], &table->bins[2],
+                sizeof(struct st_table_entry*) * 2*table->num_entries);
+        return 1;
+    }
+
+    hash_val = do_hash_bin(table->head->key, table);
+    prev = &table->bins[hash_val];
+    for (;(ptr = *prev) != 0; prev = &ptr->next) {
+	if (ptr == table->head) {
+	    *prev = ptr->next;
+            REMOVE_ENTRY(table, ptr);
+            if (value != 0) *value = ptr->record;
+            *key = ptr->key;
+            free(ptr);
+            return 1;
+	}
+    }
+
+    /* if hash is not consistent and need to be rehashed */
     if (value != 0) *value = 0;
     return 0;
 }

@@ -2,7 +2,7 @@
 
   vm_eval.c -
 
-  $Author: nobu $
+  $Author: usa $
   created at: Sat May 24 16:02:32 JST 2008
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -694,6 +694,23 @@ rb_funcall_passing_block(VALUE recv, ID mid, int argc, const VALUE *argv)
     return rb_call(recv, mid, argc, argv, CALL_PUBLIC);
 }
 
+VALUE
+rb_funcall_with_block(VALUE recv, ID mid, int argc, const VALUE *argv, VALUE pass_procval)
+{
+    if (!NIL_P(pass_procval)) {
+	rb_thread_t *th = GET_THREAD();
+	rb_block_t *block = 0;
+
+	rb_proc_t *pass_proc;
+	GetProcPtr(pass_procval, pass_proc);
+	block = &pass_proc->block;
+
+	th->passed_block = block;
+    }
+
+    return rb_call(recv, mid, argc, argv, CALL_PUBLIC);
+}
+
 static VALUE
 send_internal(int argc, const VALUE *argv, VALUE recv, call_type scope)
 {
@@ -1212,7 +1229,7 @@ rb_eval_cmd(VALUE cmd, VALUE arg, int level)
     POP_TAG();
 
     rb_set_safe_level_force(safe);
-    if (state) rb_vm_jump_tag_but_local_jump(state, val);
+    if (state) JUMP_TAG(state);
     return val;
 }
 

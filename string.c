@@ -2,7 +2,7 @@
 
   string.c -
 
-  $Author: naruse $
+  $Author: usa $
   created at: Mon Aug  9 17:12:58 JST 1993
 
   Copyright (C) 1993-2007 Yukihiro Matsumoto
@@ -1909,15 +1909,12 @@ rb_enc_cr_str_buf_cat(VALUE str, const char *ptr, long len,
     int str_encindex = ENCODING_GET(str);
     int res_encindex;
     int str_cr, res_cr;
-    int ptr_a8 = ptr_encindex == 0;
 
     str_cr = ENC_CODERANGE(str);
 
     if (str_encindex == ptr_encindex) {
-        if (str_cr == ENC_CODERANGE_UNKNOWN ||
-            (ptr_a8 && str_cr != ENC_CODERANGE_7BIT)) {
+        if (str_cr == ENC_CODERANGE_UNKNOWN)
             ptr_cr = ENC_CODERANGE_UNKNOWN;
-        }
         else if (ptr_cr == ENC_CODERANGE_UNKNOWN) {
             ptr_cr = coderange_scan(ptr, len, rb_enc_from_index(ptr_encindex));
         }
@@ -2101,7 +2098,8 @@ rb_str_concat(VALUE str1, VALUE str2)
 
     if (enc == rb_usascii_encoding()) {
 	/* US-ASCII automatically extended to ASCII-8BIT */
-	char buf[1] = {(char)code};
+	char buf[1];
+	buf[0] = (char)code;
 	if (code > 0xFF) {
 	    rb_raise(rb_eRangeError, "%u out of char range", code);
 	}
@@ -2158,12 +2156,6 @@ rb_str_prepend(VALUE str, VALUE str2)
     StringValue(str);
     rb_str_update(str, 0L, 0L, str2);
     return str;
-}
-
-st_index_t
-rb_memhash(const void *ptr, long len)
-{
-    return st_hash(ptr, len, rb_hash_start((st_index_t)len));
 }
 
 st_index_t
@@ -4050,9 +4042,28 @@ str_byte_substr(VALUE str, long beg, long len)
     }
     else {
 	str2 = rb_str_new5(str, p, len);
-	rb_enc_cr_str_copy_for_substr(str2, str);
-	OBJ_INFECT(str2, str);
     }
+
+    str_enc_copy(str2, str);
+
+    if (RSTRING_LEN(str2) == 0) {
+	if (!rb_enc_asciicompat(STR_ENC_GET(str)))
+	    ENC_CODERANGE_SET(str2, ENC_CODERANGE_VALID);
+	else
+	    ENC_CODERANGE_SET(str2, ENC_CODERANGE_7BIT);
+    }
+    else {
+	switch (ENC_CODERANGE(str)) {
+	  case ENC_CODERANGE_7BIT:
+	    ENC_CODERANGE_SET(str2, ENC_CODERANGE_7BIT);
+	    break;
+	  default:
+	    ENC_CODERANGE_SET(str2, ENC_CODERANGE_UNKNOWN);
+	    break;
+	}
+    }
+
+    OBJ_INFECT(str2, str);
 
     return str2;
 }
@@ -6784,6 +6795,7 @@ rb_str_crypt(VALUE str, VALUE salt)
     extern char *crypt(const char *, const char *);
     VALUE result;
     const char *s, *saltp;
+    char *res;
 #ifdef BROKEN_CRYPT
     char salt_8bit_clean[3];
 #endif
@@ -6803,7 +6815,11 @@ rb_str_crypt(VALUE str, VALUE salt)
 	saltp = salt_8bit_clean;
     }
 #endif
-    result = rb_str_new2(crypt(s, saltp));
+    res = crypt(s, saltp);
+    if (!res) {
+	rb_sys_fail("crypt");
+    }
+    result = rb_str_new2(res);
     OBJ_INFECT(result, str);
     OBJ_INFECT(result, salt);
     return result;
@@ -7496,7 +7512,7 @@ sym_to_sym(VALUE sym)
 }
 
 static VALUE
-sym_call(VALUE args, VALUE sym, int argc, VALUE *argv)
+sym_call(VALUE args, VALUE sym, int argc, VALUE *argv, VALUE passed_proc)
 {
     VALUE obj;
 
@@ -7504,7 +7520,7 @@ sym_call(VALUE args, VALUE sym, int argc, VALUE *argv)
 	rb_raise(rb_eArgError, "no receiver given");
     }
     obj = argv[0];
-    return rb_funcall_passing_block(obj, (ID)sym, argc - 1, argv + 1);
+    return rb_funcall_with_block(obj, (ID)sym, argc - 1, argv + 1, passed_proc);
 }
 
 /*
